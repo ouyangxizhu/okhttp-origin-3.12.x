@@ -38,7 +38,7 @@ import okhttp3.internal.Util;
  * 定义了三个双向任务队列，
  * 两个异步队列：准备执行的请求队列 readyAsyncCalls、正在运行的请求队列 runningAsyncCalls；
  * 一个正在运行的同步请求队列 runningSyncCalls；
- *
+
  *
  */
 public final class Dispatcher {

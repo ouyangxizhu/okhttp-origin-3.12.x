@@ -100,7 +100,7 @@ final class RealCall implements Call {
         eventListener.callStart(this);
         try {
             client.dispatcher().executed(this);
-            Response result = getResponseWithInterceptorChain();////调用 getResponseWithInterceptorChain()获得响应内容
+            Response result = getResponseWithInterceptorChain();//调用 getResponseWithInterceptorChain()获得响应内容
             if (result == null) throw new IOException("Canceled");
             return result;
         } catch (IOException e) {
@@ -134,8 +134,8 @@ final class RealCall implements Call {
             if (executed) throw new IllegalStateException("Already Executed");//每个请求只能执行一次
             executed = true;
         }
-        captureCallStackTrace();
-        eventListener.callStart(this);
+        captureCallStackTrace();//为retryAndFollowUpInterceptor加入了一个用于追踪堆栈信息的callStackTrace
+        eventListener.callStart(this);//之前加的listener，在这里调用
         //这里创建了一个 AsyncCall 并将Callback传入，接着再交给任务分发器 Dispatcher 来进一步处理。
         client.dispatcher().enqueue(new AsyncCall(responseCallback));
     }
@@ -218,6 +218,7 @@ final class RealCall implements Call {
             boolean signalledCallback = false;
             timeout.enter();
             try {
+                //异步和同步走的是同样的方式，主不过在子线程中执行
                 Response response = getResponseWithInterceptorChain();//调用 getResponseWithInterceptorChain()获得响应内容
                 signalledCallback = true;//这个标记主要是避免异常时2次回调
                 responseCallback.onResponse(RealCall.this, response);//回调Callback，将响应内容传回去
@@ -264,14 +265,18 @@ final class RealCall implements Call {
         List<Interceptor> interceptors = new ArrayList<>();//这是一个List，是有序的
         interceptors.addAll(client.interceptors());//首先添加的是用户添加的全局拦截器
         interceptors.add(retryAndFollowUpInterceptor);//错误、重定向拦截器
-        interceptors.add(new BridgeInterceptor(client.cookieJar()));//桥接拦截器，桥接应用层与网络层，添加必要的头、
+        interceptors.add(new BridgeInterceptor(client.cookieJar()));//封装request和response拦截器，桥接拦截器，桥接应用层与网络层，添加必要的头、
+        //构造这个过滤器的时候传入的是我们构造的OkHttpClient中设置的interanlCache,
+        // 而当我们用默认方式构造OkHttpClient的时候是不会创建缓存的，也就是internalCache=null的
         interceptors.add(new CacheInterceptor(client.internalCache()));//缓存处理，Last-Modified、ETag、DiskLruCache等
-        interceptors.add(new ConnectInterceptor(client));//连接拦截器
+        interceptors.add(new ConnectInterceptor(client));//负责和服务器建立连接拦截器
         //从这就知道，通过okHttpClient.Builder#addNetworkInterceptor()传进来的拦截器只对非网页的请求生效
+        //配置 OkHttpClient 时设置的 networkInterceptors
         if (!forWebSocket) {
             interceptors.addAll(client.networkInterceptors());
         }
         //真正访问服务器的拦截器
+        //负责向服务器发送请求数据、从服务器读取响应数据(实际网络请求)
         interceptors.add(new CallServerInterceptor(forWebSocket));
 
         Interceptor.Chain chain = new RealInterceptorChain(interceptors, null, null, null, 0,

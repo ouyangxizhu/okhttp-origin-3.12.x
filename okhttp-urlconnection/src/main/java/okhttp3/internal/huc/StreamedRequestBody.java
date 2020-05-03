@@ -12,6 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ * StreamedRequestBody实现了UnrepeatableRequestBody接口，是个流类型，不会被缓存，所以只能执行一次。
  */
 package okhttp3.internal.huc;
 

@@ -48,19 +48,24 @@ import static okhttp3.internal.Util.discard;
  *
  * */
 public final class CacheInterceptor implements Interceptor {
+  //cache是InternalCache类型，只是一个接口
   final InternalCache cache;
 
+  //构造器注入
   public CacheInterceptor(InternalCache cache) {
     this.cache = cache;
   }
 
   @Override public Response intercept(Chain chain) throws IOException {
+    //1.尝试通过这个Request拿缓存
+    //默认cache为null,可以配置cache,不为空尝试获取缓存中的response
     Response cacheCandidate = cache != null
         ? cache.get(chain.request())
         : null;
 
     long now = System.currentTimeMillis();
 
+    //根据response,time,request创建一个缓存策略，用于判断怎样使用缓存
     CacheStrategy strategy = new CacheStrategy.Factory(now, chain.request(), cacheCandidate).get();
     Request networkRequest = strategy.networkRequest;
     Response cacheResponse = strategy.cacheResponse;
@@ -74,6 +79,8 @@ public final class CacheInterceptor implements Interceptor {
     }
 
     // If we're forbidden from using the network and the cache is insufficient, fail.
+    //2.如果不允许使用网络并且缓存为空，新建一个504的Resposne返回。
+    //如果缓存策略中禁止使用网络，并且缓存又为空，则构建一个Resposne直接返回，注意返回码=504
     if (networkRequest == null && cacheResponse == null) {
       return new Response.Builder()
           .request(chain.request())
@@ -87,6 +94,7 @@ public final class CacheInterceptor implements Interceptor {
     }
 
     // If we don't need the network, we're done.
+    //不使用网络，但是又缓存，直接返回缓存
     if (networkRequest == null) {
       return cacheResponse.newBuilder()
           .cacheResponse(stripBody(cacheResponse))
@@ -96,6 +104,7 @@ public final class CacheInterceptor implements Interceptor {
     Response networkResponse = null;
     try {
       //调用下一个拦截器进行网络请求
+      //3.如果不允许使用网络，但是有缓存，返回缓存。
       networkResponse = chain.proceed(networkRequest);
     } finally {
       // If we're crashing on I/O or otherwise, don't leak the cache body.
@@ -105,8 +114,15 @@ public final class CacheInterceptor implements Interceptor {
     }
 
     // If we have a cache response too, then we're doing a conditional get.
+    //4.链式调用下一个过滤器。
+    networkResponse = chain.proceed(networkRequest);
+
+    //当缓存响应和网络响应同时存在的时候，选择用哪个
     if (cacheResponse != null) {
       if (networkResponse.code() == HTTP_NOT_MODIFIED) {
+        //如果返回码是304，客户端有缓冲的文档并发出了一个条件性的请求（一般是提供If-Modified-Since头表示客户
+        // 只想比指定日期更新的文档）。服务器告诉客户，原来缓冲的文档还可以继续使用。
+        //则使用缓存的响应
         Response response = cacheResponse.newBuilder()
             .headers(combine(cacheResponse.headers(), networkResponse.headers()))
             .sentRequestAtMillis(networkResponse.sentRequestAtMillis())
@@ -126,18 +142,26 @@ public final class CacheInterceptor implements Interceptor {
       }
     }
 
+    //使用网络响应
+    //6、7.使用网络请求得到的Resposne，并且将这个Resposne缓存起来（前提当然是能缓存）。
+   // 接下来就是脑袋都大的细节了，我也不敢说分析的十分详细，只能就我的理解总体分析，学习。
     Response response = networkResponse.newBuilder()
         .cacheResponse(stripBody(cacheResponse))
         .networkResponse(stripBody(networkResponse))
         .build();
 
+    //所以默认创建的OkHttpClient是没有缓存的
     if (cache != null) {
+      //将响应缓存
       if (HttpHeaders.hasBody(response) && CacheStrategy.isCacheable(response, networkRequest)) {
         // Offer this request to the cache.
+        //缓存Resposne的Header信息
         CacheRequest cacheRequest = cache.put(response);
+        //缓存body
         return cacheWritingResponse(cacheRequest, response);
       }
 
+      //只能缓存GET....不然移除request
       if (HttpMethod.invalidatesCache(networkRequest.method())) {
         try {
           cache.remove(networkRequest);
