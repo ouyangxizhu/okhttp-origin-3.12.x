@@ -64,7 +64,12 @@ public final class Dispatcher {
 
   public Dispatcher() {
   }
-  /** 这个线程池没有核心线程，线程数量没有限制，空闲60s就会回收*/
+  /** 这个线程池没有核心线程，线程数量没有限制，空闲60s就会回收,适用于大量耗时较短的任务；
+   * 与 Executors.newCachedThreadPool() 比较类似；
+   *
+   * 虽然线程池无任务上限，但是Dispatcher对入口enqueue()进行了把关，
+   * 最大的异步任务数默认是64，同一个主机默认是5，当然这两个默认值是可以修改的，Dispatcher提供的修改接口；
+   * */
   public synchronized ExecutorService executorService() {
     if (executorService == null) {
       executorService = new ThreadPoolExecutor(0, Integer.MAX_VALUE, 60, TimeUnit.SECONDS,

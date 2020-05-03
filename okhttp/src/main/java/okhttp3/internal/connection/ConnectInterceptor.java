@@ -13,6 +13,9 @@
  *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
+ *
+ * 这个拦截器主要是打开一个到目标服务器的 connection
+ * 并调用下一个拦截器 CallServerInterceptor。
  */
 package okhttp3.internal.connection;
 

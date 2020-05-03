@@ -40,12 +40,19 @@ import static okhttp3.internal.Util.closeQuietly;
  * Manages reuse of HTTP and HTTP/2 connections for reduced network latency. HTTP requests that
  * share the same {@link Address} may share a {@link Connection}. This class implements the policy
  * of which connections to keep open for future use.
+ *
+ * 连接池清理线程池
  */
 public final class ConnectionPool {
   /**
    * Background threads are used to cleanup expired connections. There will be at most a single
    * thread running per connection pool. The thread pool executor permits the pool itself to be
    * garbage collected.
+   * 该线程池用来清理长时间闲置的和泄漏的连接；
+   * 该线程池本身无任务上限，线程闲置60s自动回收；
+   * 虽然任务无上限，但其通过 cleanupRunning 标记来控制只有一个线程在运行，当连接池中没有连接后才会被重新设置为 false;
+   *
+   *
    */
   private static final Executor executor = new ThreadPoolExecutor(0 /* corePoolSize */,
       Integer.MAX_VALUE /* maximumPoolSize */, 60L /* keepAliveTime */, TimeUnit.SECONDS,
@@ -146,6 +153,14 @@ public final class ConnectionPool {
     return null;
   }
 
+  /**
+   * 通过 cleanupRunning 标记来控制只有一个线程在运行，当连接池中没有连接后才会被重新设置为 false;
+   * 次工作线程会不断地清理，当清理完一遍后超时连接后，根据当前连接池中最近的下一个空闲超时连接计算出一个阻塞时间并阻塞，直到连接池中没有任何连接才结束，并将 cleanupRunning 设为 false;
+   *
+   * 在每次有连接加入连接池时，如果当前没有清理任务运行，会加入一个清理任务到到线程池中执行;
+   *
+   * @param connection
+   */
   void put(RealConnection connection) {
     assert (Thread.holdsLock(this));
     if (!cleanupRunning) {

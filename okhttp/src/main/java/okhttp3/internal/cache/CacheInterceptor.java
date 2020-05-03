@@ -41,7 +41,12 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static okhttp3.internal.Util.closeQuietly;
 import static okhttp3.internal.Util.discard;
 
-/** Serves requests from the cache and writes responses to the cache. */
+/** Serves requests from the cache and writes responses to the cache.
+ * 这个拦截器主要工作是做做缓存处理，如果有有缓存并且缓存可用，那就使用缓存，
+ * 否则进行调用下一个拦截器 ConnectionInterceptor 进行网络请求，并将响应内容缓存。
+ *
+ *
+ * */
 public final class CacheInterceptor implements Interceptor {
   final InternalCache cache;
 
@@ -90,6 +95,7 @@ public final class CacheInterceptor implements Interceptor {
 
     Response networkResponse = null;
     try {
+      //调用下一个拦截器进行网络请求
       networkResponse = chain.proceed(networkRequest);
     } finally {
       // If we're crashing on I/O or otherwise, don't leak the cache body.

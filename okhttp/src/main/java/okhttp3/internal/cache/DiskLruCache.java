@@ -266,6 +266,12 @@ public final class DiskLruCache implements Closeable, Flushable {
     }
 
     // Use a single background thread to evict entries.
+    /**
+     * 该线程池用于整理本地请求缓存数据；
+     * 缓存的整理包含: 达到阀值大小的文件，删除最近最少使用的记录，在有关操作达到一定数量以后对记录进行重建；
+     * 最大运行线程数1，无需考虑线程安全问题，自动回收闲置60s的线程；
+     *
+     */
     Executor executor = new ThreadPoolExecutor(0, 1, 60L, TimeUnit.SECONDS,
         new LinkedBlockingQueue<Runnable>(), Util.threadFactory("OkHttp DiskLruCache", true));
 
