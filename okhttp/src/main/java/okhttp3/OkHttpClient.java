@@ -132,6 +132,8 @@ public class OkHttpClient
     static final List<ConnectionSpec> DEFAULT_CONNECTION_SPECS = Util
             .immutableList(ConnectionSpec.MODERN_TLS, ConnectionSpec.CLEARTEXT);
 
+    //这里初始化是在静态代码块中写的，也就是在类加载的时候初始化的，
+    // 这里我们调用了get方法，其实可以看到实际上调用的是ConnectionPool.get()方法。
     static {
         Internal.instance = new Internal() {
             @Override

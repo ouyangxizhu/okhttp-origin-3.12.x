@@ -24,6 +24,11 @@ import okhttp3.Route;
  * used so that OkHttp can learn from its mistakes: if there was a failure attempting to connect to
  * a specific IP address or proxy server, that failure is remembered and alternate routes are
  * preferred.
+ * 代码很简单，思想和全面，用Set<>集合保存错误过的数据集，
+ * 因为是new出来的连接，所有肯定没有错误，所以讲这个路由从set中移除，防止多余的检测，
+ * 那么对应的就可以联想到这里肯定有如果路由发生过错误的记录，每次使用前先检查一下，
+ * 如果原来错误过，就不用执行后面的流程了（考虑的很全面有木有，相当于缓存了发生过错误的信息）
+ *
  */
 public final class RouteDatabase {
   private final Set<Route> failedRoutes = new LinkedHashSet<>();

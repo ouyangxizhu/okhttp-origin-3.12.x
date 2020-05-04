@@ -36,6 +36,12 @@ import okhttp3.internal.connection.StreamAllocation;
 /**
  * Escalate internal APIs in {@code okhttp3} so they can be used from OkHttp's implementation
  * packages. The only implementation of this interface is in {@link OkHttpClient}.
+ * 通过查看源码可以发现是一个抽象类，并且实际上调用的是instance对象，
+ * 看到这个名词其实第一个反应就是单例模式，源码上看也没错,这里确实是单例模式中的类似饿汉模式。
+ * 但是不同的是这里的初始化并没有在这里写，其实也难怪，这个类是抽象类，是不能初始化的，
+ * 所以这里我们就需要找到这个抽象类的实现类。通过寻找可以发现这个类的实现类的初始化是在OkHttpClient中
+ *
+ *
  */
 public abstract class Internal {
 
