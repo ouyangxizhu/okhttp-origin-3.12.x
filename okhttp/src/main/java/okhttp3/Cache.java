@@ -197,6 +197,15 @@ public final class Cache implements Closeable, Flushable {
         return ByteString.encodeUtf8(url.toString()).md5().hex();
     }
 
+    /**
+     * 1.通过执行DiskLruCache的get方法拿到snapshot信息。
+     * 2.通过拿到的snapshot信息，取cleanFiles[0]中保存的头信息，构建头相关的信息的Entry.
+     * 3.通过snapshot中的cleanFiles[1]构建body信息，最终构建成缓存中保存的Response。
+     * 4.返回缓存中保存的Resposne。
+     *
+     * @param request
+     * @return
+     */
     @Nullable
     Response get(Request request) {
         //缓存的Key是和request的url直接相关的。这里通过url,得到了缓存的key。
@@ -216,6 +225,9 @@ public final class Cache implements Closeable, Flushable {
 
         try {
             //创建一个Entry,这里其实传入的是CleanFiles数组的第一个（ENTRY_METADATA = 0）得到是头信息,也就是key.0
+            //这里通过得到的snapshot.getSource构建了Entry（这个Entry是Cache的内部类，不是DiskLruCache的内部类）。
+            // 这里注意一个地方，这里的ENTRY_METADATA = 0。
+
             entry = new Entry(snapshot.getSource(ENTRY_METADATA));
         } catch (IOException e) {
             Util.closeQuietly(snapshot);
@@ -237,6 +249,7 @@ public final class Cache implements Closeable, Flushable {
         String requestMethod = response.request().method();
 
         if (HttpMethod.invalidatesCache(response.request().method())) {
+            //OKhttp只能缓存GET请求！。。。
             try {
                 remove(response.request());
             } catch (IOException ignored) {
@@ -245,6 +258,7 @@ public final class Cache implements Closeable, Flushable {
             return null;
         }
         if (!requestMethod.equals("GET")) {
+            //OKhttp只能缓存GET请求！。。。
             // Don't cache non-GET responses. We're technically allowed to cache
             // HEAD requests and some POST requests, but the complexity of doing
             // so is high and the benefit is low.
@@ -262,8 +276,10 @@ public final class Cache implements Closeable, Flushable {
             if (editor == null) {
                 return null;
             }
+            //缓存了Header信息
             entry.writeTo(editor);
-            return new CacheRequestImpl(editor);
+            //Entry的writeTo方法===============================
+            return new CacheRequestImpl(editor);//写body
         } catch (IOException e) {
             abortQuietly(editor);
             return null;
@@ -459,7 +475,7 @@ public final class Cache implements Closeable, Flushable {
 
         CacheRequestImpl(final DiskLruCache.Editor editor) {
             this.editor = editor;
-            this.cacheOut = editor.newSink(ENTRY_BODY);
+            this.cacheOut = editor.newSink(ENTRY_BODY); //ENTRY_BODY = 1
             this.body = new ForwardingSink(cacheOut) {
                 @Override
                 public void close() throws IOException {
@@ -568,12 +584,17 @@ public final class Cache implements Closeable, Flushable {
          * contains the length of the local certificate chain. These certificates are also
          * base64-encoded and appear each on their own line. A length of -1 is used to encode a null
          * array. The last line is optional. If present, it contains the TLS version.
+         *
+         * 通过Entry的构造方法更能说明clean数组中的第一项是用来保存header信息的，
+         * 从代码中可以看到利用Header.builder对传入进来的Source(也就是clean[0])进行构建，
+         * 最后利用build()方法构建了header信息。
          */
         Entry(Source in) throws IOException {
             try {
                 BufferedSource source = Okio.buffer(in);
                 url = source.readUtf8LineStrict();
                 requestMethod = source.readUtf8LineStrict();
+                //得到cleanfiles[0]来构建头信息
                 Headers.Builder varyHeadersBuilder = new Headers.Builder();
                 int varyRequestHeaderLineCount = readInt(source);
                 for (int i = 0; i < varyRequestHeaderLineCount; i++) {
@@ -600,6 +621,7 @@ public final class Cache implements Closeable, Flushable {
                 receivedResponseMillis = receivedResponseMillisString != null
                         ? Long.parseLong(receivedResponseMillisString)
                         : 0L;
+                //构建了header
                 responseHeaders = responseHeadersBuilder.build();
 
                 if (isHttps()) {
@@ -636,7 +658,17 @@ public final class Cache implements Closeable, Flushable {
             this.receivedResponseMillis = response.receivedResponseAtMillis();
         }
 
+        /**
+         * 还是原来的配方，还是原来的味道，又看到了刚才的参数ENTRY_METADATA=0，
+         * 可以看到这里对应的其实就是往dirtyFiles[0]中写入header信息，这里其实可以根据前面的分析对应，
+         * dirty是用于保存编辑更新等不是持久的数据，而对应的0对应的header,1对应的body。
+         *
+         *
+         * @param editor
+         * @throws IOException
+         */
         public void writeTo(DiskLruCache.Editor editor) throws IOException {
+            //往dirty中写入header信息，ENTRY_METADATA=0，所以是dirtyFiles[0]
             BufferedSink sink = Okio.buffer(editor.newSink(ENTRY_METADATA));
 
             sink.writeUtf8(url)
@@ -728,6 +760,13 @@ public final class Cache implements Closeable, Flushable {
                     && HttpHeaders.varyMatches(response, varyHeaders, request);
         }
 
+        /**
+         * //Entry内部类
+         *
+         * 这个方法的作用基本上就是利用Resposne.builder构建缓存中的Resposne
+         * @param snapshot
+         * @return
+         */
         public Response response(DiskLruCache.Snapshot snapshot) {
             String contentType = responseHeaders.get("Content-Type");
             String contentLength = responseHeaders.get("Content-Length");
