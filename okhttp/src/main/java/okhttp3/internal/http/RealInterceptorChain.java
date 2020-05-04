@@ -121,6 +121,18 @@ public final class RealInterceptorChain implements Interceptor.Chain {
     return proceed(request, streamAllocation, httpCodec, connection);
   }
 
+  /**
+   * 每个 Interceptor 主要做两件事情：
+   *
+   * 拦截上一层拦截器封装好的 Request，然后自身对这个 Request 进行处理，处理后向下传递。
+   * 接收下一层拦截器传递回来的 Response，然后自身对 Response 进行处理，返回给上一层。
+   * @param request
+   * @param streamAllocation
+   * @param httpCodec
+   * @param connection
+   * @return
+   * @throws IOException
+   */
   public Response proceed(Request request, StreamAllocation streamAllocation, HttpCodec httpCodec,
       RealConnection connection) throws IOException {
     if (index >= interceptors.size()) throw new AssertionError();
@@ -141,10 +153,13 @@ public final class RealInterceptorChain implements Interceptor.Chain {
 
     //是按照添加到 interceptors 集合的顺序，逐个往下调用拦截器的intercept()方法，所以在前面的拦截器会先被调用。
     // Call the next interceptor in the chain.
+    // 创建下一个RealInterceptorChain，将index+1（下一个拦截器索引）传入
     RealInterceptorChain next = new RealInterceptorChain(interceptors, streamAllocation, httpCodec,
         connection, index + 1, request, call, eventListener, connectTimeout, readTimeout,
         writeTimeout);
+    // 获取当前的拦截器
     Interceptor interceptor = interceptors.get(index);
+    // 通过Interceptor的intercept方法进行处理
     Response response = interceptor.intercept(next);
 
     // Confirm that the next interceptor made its required call to chain.proceed().

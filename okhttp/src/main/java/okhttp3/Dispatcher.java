@@ -50,12 +50,16 @@ public final class Dispatcher {
   private @Nullable ExecutorService executorService;//线程池，跟CachedThreadPool非常类似，这种类型的线程池，适用于大量的耗时较短的异步任务。
 
   /** Ready async calls in the order they'll be run. */
+  //异步请求，Dispatcher 是通过启动 ExcuteService 执行，线程池的最大并发量 64，
+  // 异步请求先放置在 readyAsyncCalls，可以执行时放到 runningAsyncCalls 中，执行结束从runningAsyncCalls 中移除。
   private final Deque<AsyncCall> readyAsyncCalls = new ArrayDeque<>();//准备执行的请求队列
 
   /** Running asynchronous calls. Includes canceled calls that haven't finished yet. */
   private final Deque<AsyncCall> runningAsyncCalls = new ArrayDeque<>();//正在运行的请求队列
 
   /** Running synchronous calls. Includes canceled calls that haven't finished yet. */
+  //同步请求，由于它是即时运行的， Dispatcher 只需要运行前请求前存储到 runningSyncCalls，
+  // 请求结束后从 runningSyncCalls 中移除即可。
   private final Deque<RealCall> runningSyncCalls = new ArrayDeque<>();//一个正在运行的同步请求队列
 
   public Dispatcher(ExecutorService executorService) {
@@ -141,6 +145,7 @@ public final class Dispatcher {
   }
 
   void enqueue(AsyncCall call) {
+    // 将AsyncCall加入到准备异步调用的队列中
     synchronized (this) {
       readyAsyncCalls.add(call);
     }
@@ -171,6 +176,10 @@ public final class Dispatcher {
    * can call into user code.
    *
    *将 readyAsyncCalls 中的任务移动到 runningAsyncCalls中，并交给线程池来执行。
+   *
+   * 从准备异步请求的队列中取出可以执行的请求（正在运行的异步请求不得超过64，同一个host下的异步请求不得超过5个），
+   * 加入到 executableCalls 列表中。
+   * 循环 executableCalls 取出请求 AsyncCall 对象，调用其 executeOn 方法。
    * @return true if the dispatcher is currently running calls.
    */
   private boolean promoteAndExecute() {
@@ -195,7 +204,7 @@ public final class Dispatcher {
 
     for (int i = 0, size = executableCalls.size(); i < size; i++) {
       AsyncCall asyncCall = executableCalls.get(i);
-      asyncCall.executeOn(executorService());
+      asyncCall.executeOn(executorService());//传入线程池
     }
 
     return isRunning;

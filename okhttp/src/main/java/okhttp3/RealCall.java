@@ -89,9 +89,18 @@ final class RealCall implements Call {
         return originalRequest;
     }
 
+    /**
+     * 检测这个 call 是否已经执行了，保证每个 call 只能执行一次。
+     * 通知 dispatcher 已经进入执行状态，将 call 加入到 runningSyncCalls 队列中。
+     * 调用 getResponseWithInterceptorChain() 函数获取 HTTP 返回结果。
+     * 最后还要通知 dispatcher 自己已经执行完毕，将 call 从 runningSyncCalls 队列中移除。
+     * @return
+     * @throws IOException
+     */
     @Override
     public Response execute() throws IOException {//模板方法实现
         synchronized (this) {
+            // 每个 call 只能执行一次
             if (executed) throw new IllegalStateException("Already Executed");
             executed = true;
         }
@@ -99,7 +108,9 @@ final class RealCall implements Call {
         timeout.enter();
         eventListener.callStart(this);
         try {
+            // 请求开始, 将自己加入到runningSyncCalls队列中
             client.dispatcher().executed(this);
+            // 通过一系列拦截器请求处理和响应处理得到最终的返回结果
             Response result = getResponseWithInterceptorChain();//调用 getResponseWithInterceptorChain()获得响应内容
             if (result == null) throw new IOException("Canceled");
             return result;
@@ -108,6 +119,7 @@ final class RealCall implements Call {
             eventListener.callFailed(this, e);
             throw e;
         } finally {
+            // 请求完成, 将其从runningSyncCalls队列中移除
             client.dispatcher().finished(this);
         }
     }
@@ -219,6 +231,7 @@ final class RealCall implements Call {
             timeout.enter();
             try {
                 //异步和同步走的是同样的方式，主不过在子线程中执行
+                // 请求网络获取结果
                 Response response = getResponseWithInterceptorChain();//调用 getResponseWithInterceptorChain()获得响应内容
                 signalledCallback = true;//这个标记主要是避免异常时2次回调
                 responseCallback.onResponse(RealCall.this, response);//回调Callback，将响应内容传回去
@@ -240,6 +253,7 @@ final class RealCall implements Call {
                 throw t;
             } finally {
                 //不管请求成功与否，都进行finished()操作
+                // 调度完成，移出队列
                 client.dispatcher().finished(this);
             }
         }
@@ -259,6 +273,19 @@ final class RealCall implements Call {
         return originalRequest.url().redact();
     }
 
+    /**
+     * 这里先是创建了一个 Interceptor 的集合，然后将各类 interceptor 全部加入到集合中，包含以下 interceptor：
+     *
+     * interceptors：配置 OkHttpClient 时设置的 inteceptors
+     * RetryAndFollowUpInterceptor：负责失败重试以及重定向
+     * BridgeInterceptor：负责把用户构造的请求转换为发送到服务器的请求、把服务器返回的响应转换为用户友好的响应
+     * CacheInterceptor：负责读取缓存直接返回、更新缓存
+     * ConnectInterceptor：负责和服务器建立连接
+     * networkInterceptors：配置 OkHttpClient 时设置的 networkInterceptors
+     * CallServerInterceptor：负责向服务器发送请求数据、从服务器读取响应数据
+     * @return
+     * @throws IOException
+     */
     //拦截器链
     Response getResponseWithInterceptorChain() throws IOException {
         // Build a full stack of interceptors.

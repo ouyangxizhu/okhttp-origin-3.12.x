@@ -24,6 +24,7 @@ import okio.Timeout;
  */
 public interface Call extends Cloneable {
   /** Returns the original request that initiated this call. */
+  // 返回当前请求
   Request request();
 
   /**
@@ -54,7 +55,9 @@ public interface Call extends Cloneable {
    * problem or timeout. Because networks can fail during an exchange, it is possible that the
    * remote server accepted the request before the failure.
    * @throws IllegalStateException when the call has already been executed.
+   *
    */
+  // 同步请求方法
   Response execute() throws IOException;
 
   /**
@@ -68,17 +71,21 @@ public interface Call extends Cloneable {
    *
    * @throws IllegalStateException when the call has already been executed.
    */
+  // 异步请求方法
   void enqueue(Callback responseCallback);
 
   /** Cancels the request, if possible. Requests that are already complete cannot be canceled. */
+  //取消请求
   void cancel();
 
   /**
    * Returns true if this call has been either {@linkplain #execute() executed} or {@linkplain
    * #enqueue(Callback) enqueued}. It is an error to execute a call more than once.
    */
+  // 请求是否在执行（当execute()或者enqueue(Callback responseCallback)执行后该方法返回true）
   boolean isExecuted();
 
+  // 请求是否被取消
   boolean isCanceled();
 
   /**
@@ -94,6 +101,7 @@ public interface Call extends Cloneable {
    * Create a new, identical call to this one which can be enqueued or executed even if this call
    * has already been.
    */
+  // 创建一个新的一模一样的请求
   Call clone();
 
   interface Factory {
