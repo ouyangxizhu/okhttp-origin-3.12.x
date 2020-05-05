@@ -19,21 +19,22 @@ package okhttp3.internal;
  * Runnable implementation which always sets its thread name.
  */
 public abstract class NamedRunnable implements Runnable {
-  protected final String name;
+    protected final String name;
 
-  public NamedRunnable(String format, Object... args) {
-    this.name = Util.format(format, args);
-  }
-
-  @Override public final void run() {
-    String oldName = Thread.currentThread().getName();
-    Thread.currentThread().setName(name);//设置名字，方便监控
-    try {
-      execute();//模板方法，具体实现留给子类实现
-    } finally {
-      Thread.currentThread().setName(oldName);
+    public NamedRunnable(String format, Object... args) {
+        this.name = Util.format(format, args);
     }
-  }
 
-  protected abstract void execute();
+    @Override
+    public final void run() {
+        String oldName = Thread.currentThread().getName();
+        Thread.currentThread().setName(name);//设置名字，方便监控
+        try {
+            execute();//模板方法，具体实现留给子类实现
+        } finally {
+            Thread.currentThread().setName(oldName);
+        }
+    }
+
+    protected abstract void execute();
 }

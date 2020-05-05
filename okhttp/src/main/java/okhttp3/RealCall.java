@@ -80,7 +80,7 @@ final class RealCall implements Call {
     static RealCall newRealCall(OkHttpClient client, Request originalRequest, boolean forWebSocket) {
         // Safely publish the Call instance to the EventListener.
         RealCall call = new RealCall(client, originalRequest, forWebSocket);
-        call.eventListener = client.eventListenerFactory().create(call);
+        call.eventListener = client.eventListenerFactory().create(call);//创建事件监听器，用于跟踪等
         return call;
     }
 
@@ -211,7 +211,7 @@ final class RealCall implements Call {
             assert (!Thread.holdsLock(client.dispatcher()));
             boolean success = false;
             try {
-                executorService.execute(this);
+                executorService.execute(this);//这里的this指AsyncCall
                 success = true;
             } catch (RejectedExecutionException e) {
                 InterruptedIOException ioException = new InterruptedIOException("executor rejected");
@@ -230,7 +230,7 @@ final class RealCall implements Call {
             boolean signalledCallback = false;
             timeout.enter();
             try {
-                //异步和同步走的是同样的方式，主不过在子线程中执行
+                //异步和同步走的是同样的方式，只不过在子线程中执行
                 // 请求网络获取结果
                 Response response = getResponseWithInterceptorChain();//调用 getResponseWithInterceptorChain()获得响应内容
                 signalledCallback = true;//这个标记主要是避免异常时2次回调
@@ -274,7 +274,7 @@ final class RealCall implements Call {
     }
 
     /**
-     * 这里先是创建了一个 Interceptor 的集合，然后将各类 interceptor 全部加入到集合中，包含以下 interceptor：
+     * 这里先是创建了一个 Interceptor 的ArrayLIst，然后将各类 interceptor 全部加入到ArrayLIst中，之后按照顺序执行。包含以下 interceptor：
      *
      * interceptors：配置 OkHttpClient 时设置的 inteceptors
      * RetryAndFollowUpInterceptor：负责失败重试以及重定向
@@ -306,6 +306,7 @@ final class RealCall implements Call {
         //负责向服务器发送请求数据、从服务器读取响应数据(实际网络请求)
         interceptors.add(new CallServerInterceptor(forWebSocket));
 
+        //注意这里的0，即从头开始执行，这里传入的参数很多都是null，之后再创建
         Interceptor.Chain chain = new RealInterceptorChain(interceptors, null, null, null, 0,
                 originalRequest, this, eventListener, client.connectTimeoutMillis(),
                 client.readTimeoutMillis(), client.writeTimeoutMillis());

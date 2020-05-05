@@ -585,7 +585,7 @@ public final class StreamAllocation {
         return socket;
     }
 
-    public boolean hasMoreRoutes() {//routeSelection是用List保存的。
+    public boolean hasMoreRoutes() {//routeSelection是用List保存的。到末尾了，就是没有路由了
         return route != null
                 || (routeSelection != null && routeSelection.hasNext())
                 || routeSelector.hasNext();

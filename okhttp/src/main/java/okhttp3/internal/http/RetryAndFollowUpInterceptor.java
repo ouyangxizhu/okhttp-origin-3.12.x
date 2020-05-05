@@ -114,7 +114,7 @@ public final class RetryAndFollowUpInterceptor implements Interceptor {
         Call call = realChain.call();
         EventListener eventListener = realChain.eventListener();
 
-        //创建一个StreamAllocation，
+        //创建一个StreamAllocation，说一下StreamAllocation这个对象是干什么的。这个类大概可以理解为是处理Connections,Streams,Calls三者之间的关系
         StreamAllocation streamAllocation = new StreamAllocation(client.connectionPool(),
                 createAddress(request.url()), call, eventListener, callStackTrace);
         this.streamAllocation = streamAllocation;
@@ -123,7 +123,7 @@ public final class RetryAndFollowUpInterceptor implements Interceptor {
         int followUpCount = 0;
         Response priorResponse = null;
         while (true) {
-            //取消
+            //如果请求被取消
             if (canceled) {
                 streamAllocation.release();
                 throw new IOException("Canceled");
@@ -135,13 +135,14 @@ public final class RetryAndFollowUpInterceptor implements Interceptor {
                 //调用下一个interceptor的来获得响应内容
                 response = realChain.proceed(request, streamAllocation, null, null);
                 releaseConnection = false;
+                //下面捕获的都是一些自定义异常
             } catch (RouteException e) {
                 // The attempt to connect via a route failed. The request will not have been sent.
                 //尝试连接一个路由失败，这个请求还没有被发出
                 if (!recover(e.getLastConnectException(), streamAllocation, false, request)) {
                     throw e.getFirstConnectException();
                 }
-                releaseConnection = false;
+                releaseConnection = false;//初始化是为true，现在变成false了，捕获到异常都变成false
                 continue;//重试
             } catch (IOException e) {
                 // An attempt to communicate with a server failed. The request may have been sent.
@@ -164,9 +165,10 @@ public final class RetryAndFollowUpInterceptor implements Interceptor {
             }
 
             // Attach the prior response if it exists. Such responses never have a body.
-            //这里基本上都没有讲，priorResponse是用来保存前一个Resposne的，
+            //priorResponse是用来保存前一个Resposne的，
             // 这里可以看到将前一个Response和当前的Resposne结合在一起了，
-            // 对应的场景是，当获得Resposne后，发现需要重定向，则将当前Resposne设置给priorResponse，再执行一遍流程，
+            // 对应的场景是，当获得Resposne后，发现需要重定向，则将当前Respones设置给priorResponse，再执行一遍流程，
+
             //直到不需要重定向了，则将priorResponse和Resposne结合起来。
             if (priorResponse != null) {
                 response = response.newBuilder()
@@ -247,16 +249,20 @@ public final class RetryAndFollowUpInterceptor implements Interceptor {
         streamAllocation.streamFailed(e);
 
         // The application layer has forbidden retries.
-        //如果OkHttpClient直接配置拒绝失败重连，return false，默认时true
+        //如果OkHttpClient直接配置拒绝失败重连，不重连。默认为true，即失败时重连
         if (!client.retryOnConnectionFailure()) return false;
 
         // We can't send the request body again.
-        //如果请求已经发送，并且这个请求体是一个UnrepeatableRequestBody类型，则不能重试。
-        //StreamedRequestBody实现了UnrepeatableRequestBody接口，是个流类型，不会被缓存，所以只能执行一次，具体可看。
+        //如果请求已经发送（传入时为false），并且这个请求体是一个UnrepeatableRequestBody类型，则不能重试。
+        //只有StreamedRequestBody实现了UnrepeatableRequestBody接口，是个流类型，不会被缓存，所以只能执行一次。
         if (requestSendStarted && requestIsUnrepeatable(e, userRequest)) return false;
 
         // This exception is fatal.
         //一些严重的问题，就不要重试了
+        //大致以下三种
+        //1.协议问题，不能重试。
+        //2.如果是超时问题，并且请求没有被发送，可以重试，其他的就不要重试了。
+        //3.安全问题，不要重试。
         if (!isRecoverable(e, requestSendStarted)) return false;
 
         // No more routes to attempt.
@@ -268,10 +274,18 @@ public final class RetryAndFollowUpInterceptor implements Interceptor {
     }
 
     private boolean requestIsUnrepeatable(IOException e, Request userRequest) {
-        return userRequest.body() instanceof UnrepeatableRequestBody
+        return userRequest.body() instanceof UnrepeatableRequestBody//这时一个空接口，就是用来标记不可以被重定向的
                 || e instanceof FileNotFoundException;
     }
 
+    /**
+     * 1.协议问题，不能重试。
+     * 2.如果是超时问题，并且请求没有被发送，可以重试，其他的就不要重试了。
+     * 3.安全问题，不要重试。
+     * @param e
+     * @param requestSendStarted
+     * @return
+     */
     private boolean isRecoverable(IOException e, boolean requestSendStarted) {
         // If there was a protocol problem, don't recover.
         //如果是协议问题，不要在重试了
@@ -313,7 +327,9 @@ public final class RetryAndFollowUpInterceptor implements Interceptor {
      * Figures out the HTTP request to make in response to receiving {@code userResponse}. This will
      * either add authentication headers, follow redirects or handle a client request timeout. If a
      * follow-up is either unnecessary or not applicable, this returns null.
+     *
      * 当返回码满足某些条件时就重新构造一个Request，不满足就返回null,所以接下来的代码就很容易理解了。
+     *
      */
     private Request followUpRequest(Response userResponse, Route route) throws IOException {
         if (userResponse == null) throw new IllegalStateException();
